@@ -1,0 +1,36 @@
+import { Pool } from 'pg';
+import Redis from 'ioredis';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+// Fix: Handle SSL connections for Cloud Databases (Railway/Render)
+const isProduction = process.env.NODE_ENV === 'production';
+
+export const pgPool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: isProduction ? { rejectUnauthorized: false } : false
+});
+
+// Fix: Redis URL parsing for Cloud
+// Some clouds give a full "rediss://..." URL instead of host/port
+export const redisClient = process.env.REDIS_URL
+    ? new Redis(process.env.REDIS_URL, { maxRetriesPerRequest: null })
+    : new Redis({
+        host: process.env.REDIS_HOST || '127.0.0.1',
+        port: Number(process.env.REDIS_PORT) || 6379,
+        maxRetriesPerRequest: null,
+    });
+
+export async function checkConnections() {
+    try {
+        const pgRes = await pgPool.query('SELECT NOW()');
+        console.log('✅ Postgres Connected');
+        await redisClient.ping();
+        console.log('✅ Redis Connected');
+        return true;
+    } catch (error) {
+        console.error('❌ Connection Error:', error);
+        return false;
+    }
+}
